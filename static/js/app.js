@@ -19,6 +19,7 @@ function scrollToTop() {
 
 function parseRoute() {
   const path = window.location.pathname;
+  if (path.match(/^\/evaluations\/?$/)) return { view: "evaluations" };
   const caseMatch = path.match(/^\/case\/(\d+)\/?$/);
   if (caseMatch) return { view: "case", sessionId: parseInt(caseMatch[1], 10) };
   const deptMatch = path.match(/^\/department\/([a-z]+)\/?$/);
@@ -46,12 +47,38 @@ function navigate(path) {
 
 window.addEventListener("popstate", render);
 
+const SCORE_FIELDS = [
+  "clinical_relevance_score",
+  "question_specificity_score",
+  "single_question_score",
+  "safety_score",
+  "linguistic_score",
+  "denial_handling_score",
+  "department_accuracy_score",
+  "clinical_reasoning_score",
+];
+
+function scoreAverage(item) {
+  const values = SCORE_FIELDS.map((f) => item[f]).filter((v) => v != null);
+  if (!values.length) return "—";
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  return Number.isInteger(avg) ? String(avg) : avg.toFixed(1);
+}
+
+function setPageLayout(view) {
+  appEl.classList.toggle("page-evaluations", view === "evaluations");
+}
+
 async function renderHome() {
+  setPageLayout("home");
   const departments = await api("/api/departments");
   appEl.innerHTML = `
     <header class="page-header">
       <h1>تقييم المحادثات الطبية</h1>
-      <p>Expert Medical Chat Evaluation — اختر القسم الطبي للبدء</p>
+      <p>واجهة الأطباء الخبراء — Multi-Agent Medical Chatbot Evaluation</p>
+      <div class="top-actions">
+        <a class="btn btn-outline" href="/evaluations" data-nav>عرض كل التقييمات المحفوظة</a>
+      </div>
     </header>
     <div class="dept-grid">
       ${departments
@@ -80,7 +107,188 @@ async function renderHome() {
   bindNavLinks();
 }
 
+function downloadEvaluationsCsv(rows) {
+  const headers = [
+    "القسم",
+    "رقم الحالة",
+    "Session ID",
+    "المتوسط",
+    "ارتباط",
+    "دقة",
+    "سؤال واحد",
+    "سلامة",
+    "لغة",
+    "رفض",
+    "قسم (دقة)",
+    "سريري",
+    "ملاحظات",
+    "آخر تحديث",
+  ];
+  const lines = [headers.join(",")];
+  for (const item of rows) {
+    const cells = [
+      item.department_name,
+      item.case_number ?? "",
+      item.session_id,
+      scoreAverage(item),
+      item.clinical_relevance_score,
+      item.question_specificity_score,
+      item.single_question_score,
+      item.safety_score,
+      item.linguistic_score,
+      item.denial_handling_score,
+      item.department_accuracy_score,
+      item.clinical_reasoning_score,
+      (item.doctor_notes || "").replace(/"/g, '""'),
+      item.updated_at,
+    ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`);
+    lines.push(cells.join(","));
+  }
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "expert_evaluations.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderEvaluationsTableRows(rows) {
+  if (!rows.length) {
+    return `<tr><td colspan="12" class="table-empty">لا توجد تقييمات لهذا القسم.</td></tr>`;
+  }
+  return rows
+    .map((item) => {
+      const notes = item.doctor_notes ? escapeHtml(item.doctor_notes) : "—";
+      const caseLabel =
+        item.case_number != null
+          ? `Case ${item.case_number}<span class="session-id">${item.session_id}</span>`
+          : `Session ${item.session_id}`;
+      const score = (f) => (item[f] != null ? item[f] : "—");
+      return `
+        <tr class="eval-row" data-session="${item.session_id}">
+          <td>${escapeHtml(item.department_name)}</td>
+          <td>
+            <a href="/case/${item.session_id}" class="case-link" data-nav>${caseLabel}</a>
+          </td>
+          <td class="num">${scoreAverage(item)}</td>
+          <td class="num">${score("clinical_relevance_score")}</td>
+          <td class="num">${score("question_specificity_score")}</td>
+          <td class="num">${score("single_question_score")}</td>
+          <td class="num">${score("safety_score")}</td>
+          <td class="num">${score("linguistic_score")}</td>
+          <td class="num">${score("denial_handling_score")}</td>
+          <td class="num">${score("department_accuracy_score")}</td>
+          <td class="num">${score("clinical_reasoning_score")}</td>
+          <td class="notes-cell">${notes}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+async function renderEvaluations() {
+  setPageLayout("evaluations");
+  const [evaluations, departments] = await Promise.all([
+    api("/api/evaluations"),
+    api("/api/departments"),
+  ]);
+
+  const deptOptions = departments
+    .map(
+      (d) =>
+        `<option value="${d.key}">${escapeHtml(d.name_ar)}</option>`
+    )
+    .join("");
+
+  appEl.innerHTML = `
+    <nav class="breadcrumb">
+      <a href="/" data-nav>الرئيسية</a>
+      <span>›</span>
+      <span>التقييمات المحفوظة</span>
+    </nav>
+    <header class="page-header">
+      <h1>التقييمات المحفوظة</h1>
+      <p>كل التقييمات المسجّلة من الأطباء — من قاعدة البيانات مباشرة</p>
+    </header>
+  `;
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "eval-toolbar section-card";
+  toolbar.innerHTML = `
+    <div class="eval-total">إجمالي التقييمات: <strong id="eval-count">${evaluations.length}</strong></div>
+    <label class="eval-filter">
+      <span>القسم:</span>
+      <select id="dept-filter">
+        <option value="">كل الأقسام</option>
+        ${deptOptions}
+      </select>
+    </label>
+    <button type="button" class="btn btn-outline" id="btn-csv">تنزيل CSV (أو Excel)</button>
+  `;
+  appEl.appendChild(toolbar);
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "section-card table-card";
+  tableWrap.innerHTML = `
+    <div class="table-scroll">
+      <table class="eval-table">
+        <thead>
+          <tr>
+            <th>القسم</th>
+            <th>الحالة</th>
+            <th>المتوسط</th>
+            <th>ارتباط</th>
+            <th>دقة</th>
+            <th>سؤال واحد</th>
+            <th>سلامة</th>
+            <th>لغة</th>
+            <th>رفض</th>
+            <th>قسم</th>
+            <th>سريري</th>
+            <th>ملاحظات</th>
+          </tr>
+        </thead>
+        <tbody id="eval-tbody">${renderEvaluationsTableRows(evaluations)}</tbody>
+      </table>
+    </div>
+  `;
+  appEl.appendChild(tableWrap);
+
+  if (!evaluations.length) {
+    tableWrap.querySelector("#eval-tbody").innerHTML =
+      `<tr><td colspan="12" class="table-empty">لا توجد تقييمات محفوظة بعد.</td></tr>`;
+  }
+
+  const allRows = evaluations;
+
+  function applyFilter() {
+    const key = document.getElementById("dept-filter").value;
+    const filtered = key
+      ? allRows.filter((r) => r.department_key === key)
+      : allRows;
+    document.getElementById("eval-count").textContent = filtered.length;
+    document.getElementById("eval-tbody").innerHTML =
+      renderEvaluationsTableRows(filtered);
+    bindNavLinks();
+  }
+
+  document.getElementById("dept-filter").addEventListener("change", applyFilter);
+  document.getElementById("btn-csv").addEventListener("click", () => {
+    const key = document.getElementById("dept-filter").value;
+    const filtered = key
+      ? allRows.filter((r) => r.department_key === key)
+      : allRows;
+    downloadEvaluationsCsv(filtered);
+  });
+
+  bindNavLinks();
+}
+
 async function renderDepartment(deptKey) {
+  setPageLayout("department");
   const [departments, cases] = await Promise.all([
     api("/api/departments"),
     api(`/api/departments/${deptKey}/cases`),
@@ -200,6 +408,7 @@ function bindAccordion() {
 }
 
 async function renderCase(sessionId) {
+  setPageLayout("case");
   const [sessionData, evaluation] = await Promise.all([
     api(`/api/sessions/${sessionId}/messages`),
     api(`/api/sessions/${sessionId}/evaluation`).catch(() => null),
@@ -327,6 +536,7 @@ async function render() {
 
   try {
     if (route.view === "home") await renderHome();
+    else if (route.view === "evaluations") await renderEvaluations();
     else if (route.view === "department") await renderDepartment(route.deptKey);
     else if (route.view === "case") await renderCase(route.sessionId);
   } catch (err) {

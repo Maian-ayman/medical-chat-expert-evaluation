@@ -51,6 +51,23 @@ class EvaluationOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class EvaluationListItemOut(BaseModel):
+    session_id: int
+    case_number: int | None = None
+    department_key: str | None = None
+    department_name: str
+    clinical_relevance_score: int | None = None
+    question_specificity_score: int | None = None
+    single_question_score: int | None = None
+    safety_score: int | None = None
+    linguistic_score: int | None = None
+    denial_handling_score: int | None = None
+    department_accuracy_score: int | None = None
+    clinical_reasoning_score: int | None = None
+    doctor_notes: str | None = None
+    updated_at: datetime
+
+
 class EvaluationIn(BaseModel):
     clinical_relevance_score: int = Field(..., ge=1, le=3)
     question_specificity_score: int = Field(..., ge=1, le=3)

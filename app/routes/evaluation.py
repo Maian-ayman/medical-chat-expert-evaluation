@@ -11,6 +11,7 @@ from app.schemas import (
     CaseOut,
     DepartmentOut,
     EvaluationIn,
+    EvaluationListItemOut,
     EvaluationOut,
     MessageOut,
     SessionMessagesOut,
@@ -23,6 +24,18 @@ VISIBLE_ROLES = ("user", "assistant")
 
 def _session_ids_for_department(dept: dict) -> list[int]:
     return list(range(dept["session_start"], dept["session_end"] + 1))
+
+
+def _case_meta(session_id: int) -> tuple[str | None, str | None, int | None]:
+    dept = department_for_session(session_id)
+    if not dept:
+        return None, None, None
+    session_ids = _session_ids_for_department(dept)
+    try:
+        idx = session_ids.index(session_id)
+    except ValueError:
+        return dept["key"], dept["name_ar"], None
+    return dept["key"], dept["name_ar"], idx + 1
 
 
 def _evaluated_session_ids(db: Session, session_ids: list[int]) -> set[int]:
@@ -148,6 +161,39 @@ def get_evaluation(session_id: int, db: Session = Depends(get_db)):
         doctor_notes=evaluation.doctor_notes,
         updated_at=evaluation.updated_at,
     )
+
+
+@router.get("/evaluations", response_model=list[EvaluationListItemOut])
+def list_evaluations(db: Session = Depends(get_db)):
+    evaluations = (
+        db.execute(
+            select(ExpertEvaluation).order_by(ExpertEvaluation.updated_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    result = []
+    for evaluation in evaluations:
+        dept_key, _, case_number = _case_meta(evaluation.session_id)
+        result.append(
+            EvaluationListItemOut(
+                session_id=evaluation.session_id,
+                case_number=case_number,
+                department_key=dept_key,
+                department_name=evaluation.department_name,
+                clinical_relevance_score=evaluation.clinical_relevance_score,
+                question_specificity_score=evaluation.question_specificity_score,
+                single_question_score=evaluation.single_question_score,
+                safety_score=evaluation.safety_score,
+                linguistic_score=evaluation.linguistic_score,
+                denial_handling_score=evaluation.denial_handling_score,
+                department_accuracy_score=evaluation.department_accuracy_score,
+                clinical_reasoning_score=evaluation.clinical_reasoning_score,
+                doctor_notes=evaluation.doctor_notes,
+                updated_at=evaluation.updated_at,
+            )
+        )
+    return result
 
 
 @router.post("/sessions/{session_id}/evaluation", response_model=EvaluationOut)
