@@ -12,6 +12,7 @@ from app.schemas import (
     DepartmentOut,
     EvaluationIn,
     EvaluationListItemOut,
+    EvaluationTableRowOut,
     EvaluationOut,
     MessageOut,
     SessionMessagesOut,
@@ -24,18 +25,6 @@ VISIBLE_ROLES = ("user", "assistant")
 
 def _session_ids_for_department(dept: dict) -> list[int]:
     return list(range(dept["session_start"], dept["session_end"] + 1))
-
-
-def _case_meta(session_id: int) -> tuple[str | None, str | None, int | None]:
-    dept = department_for_session(session_id)
-    if not dept:
-        return None, None, None
-    session_ids = _session_ids_for_department(dept)
-    try:
-        idx = session_ids.index(session_id)
-    except ValueError:
-        return dept["key"], dept["name_ar"], None
-    return dept["key"], dept["name_ar"], idx + 1
 
 
 def _evaluated_session_ids(db: Session, session_ids: list[int]) -> set[int]:
@@ -163,8 +152,8 @@ def get_evaluation(session_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/evaluations", response_model=list[EvaluationListItemOut])
-def list_evaluations(db: Session = Depends(get_db)):
+@router.get("/evaluations/saved", response_model=list[EvaluationListItemOut])
+def list_saved_evaluations(db: Session = Depends(get_db)):
     evaluations = (
         db.execute(
             select(ExpertEvaluation).order_by(ExpertEvaluation.updated_at.desc())
@@ -172,14 +161,21 @@ def list_evaluations(db: Session = Depends(get_db)):
         .scalars()
         .all()
     )
-    result = []
+    result: list[EvaluationListItemOut] = []
     for evaluation in evaluations:
-        dept_key, _, case_number = _case_meta(evaluation.session_id)
+        dept = department_for_session(evaluation.session_id)
+        if not dept:
+            continue
+        session_ids = _session_ids_for_department(dept)
+        try:
+            case_number = session_ids.index(evaluation.session_id) + 1
+        except ValueError:
+            continue
         result.append(
             EvaluationListItemOut(
                 session_id=evaluation.session_id,
                 case_number=case_number,
-                department_key=dept_key,
+                department_key=dept["key"],
                 department_name=evaluation.department_name,
                 clinical_relevance_score=evaluation.clinical_relevance_score,
                 question_specificity_score=evaluation.question_specificity_score,
@@ -194,6 +190,53 @@ def list_evaluations(db: Session = Depends(get_db)):
             )
         )
     return result
+
+
+@router.get("/evaluations", response_model=list[EvaluationTableRowOut])
+def list_evaluations(db: Session = Depends(get_db)):
+    # Build table rows for all session_ids inside our evaluation scope.
+    # If a session isn't evaluated yet, rubric scores will be null.
+    all_rows: list[EvaluationTableRowOut] = []
+
+    # Fetch all existing evaluations in one query.
+    all_session_ids: list[int] = []
+    for dept in DEPARTMENTS:
+        all_session_ids.extend(_session_ids_for_department(dept))
+
+    evaluations = (
+        db.execute(
+            select(ExpertEvaluation).where(ExpertEvaluation.session_id.in_(all_session_ids))
+        )
+        .scalars()
+        .all()
+    )
+    by_session: dict[int, ExpertEvaluation] = {e.session_id: e for e in evaluations}
+
+    for dept in DEPARTMENTS:
+        session_ids = _session_ids_for_department(dept)
+        for idx, sid in enumerate(session_ids):
+            evaluation = by_session.get(sid)
+            all_rows.append(
+                EvaluationTableRowOut(
+                    case_number=idx + 1,
+                    session_id=sid,
+                    department_key=dept["key"],
+                    department_name=dept["name_ar"],
+                    evaluated=evaluation is not None,
+                    clinical_relevance_score=getattr(evaluation, "clinical_relevance_score", None),
+                    question_specificity_score=getattr(evaluation, "question_specificity_score", None),
+                    single_question_score=getattr(evaluation, "single_question_score", None),
+                    safety_score=getattr(evaluation, "safety_score", None),
+                    linguistic_score=getattr(evaluation, "linguistic_score", None),
+                    denial_handling_score=getattr(evaluation, "denial_handling_score", None),
+                    department_accuracy_score=getattr(evaluation, "department_accuracy_score", None),
+                    clinical_reasoning_score=getattr(evaluation, "clinical_reasoning_score", None),
+                    doctor_notes=getattr(evaluation, "doctor_notes", None),
+                    updated_at=getattr(evaluation, "updated_at", None),
+                )
+            )
+
+    return all_rows
 
 
 @router.post("/sessions/{session_id}/evaluation", response_model=EvaluationOut)

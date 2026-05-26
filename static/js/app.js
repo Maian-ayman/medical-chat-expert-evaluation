@@ -28,16 +28,59 @@ function parseRoute() {
 }
 
 async function api(url, options = {}) {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { "Content-Type": "application/json", ...options.headers },
+      ...options,
+    });
+  } catch {
+    throw new Error(
+      "تعذر الاتصال بالخادم (Failed to fetch). تأكدي أن السيرفر يعمل ثم حدّثي الصفحة."
+    );
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Request failed (${res.status})`);
+    const detail = err.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d) => d.msg || JSON.stringify(d)).join(", ")
+          : `Request failed (${res.status})`;
+    throw new Error(message);
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+async function loadSavedEvaluations() {
+  try {
+    return await api("/api/evaluations/saved");
+  } catch (err) {
+    const msg = String(err.message || "");
+    const isMissingEndpoint =
+      msg.includes("404") || msg.includes("Not Found") || msg.includes("not found");
+    if (!isMissingEndpoint) throw err;
+
+    const all = await api("/api/evaluations");
+    return all.filter((r) => r.evaluated).map((r) => ({
+      session_id: r.session_id,
+      case_number: r.case_number,
+      department_key: r.department_key,
+      department_name: r.department_name,
+      clinical_relevance_score: r.clinical_relevance_score,
+      question_specificity_score: r.question_specificity_score,
+      single_question_score: r.single_question_score,
+      safety_score: r.safety_score,
+      linguistic_score: r.linguistic_score,
+      denial_handling_score: r.denial_handling_score,
+      department_accuracy_score: r.department_accuracy_score,
+      clinical_reasoning_score: r.clinical_reasoning_score,
+      doctor_notes: r.doctor_notes,
+      updated_at: r.updated_at,
+    }));
+  }
 }
 
 function navigate(path) {
@@ -47,37 +90,14 @@ function navigate(path) {
 
 window.addEventListener("popstate", render);
 
-const SCORE_FIELDS = [
-  "clinical_relevance_score",
-  "question_specificity_score",
-  "single_question_score",
-  "safety_score",
-  "linguistic_score",
-  "denial_handling_score",
-  "department_accuracy_score",
-  "clinical_reasoning_score",
-];
-
-function scoreAverage(item) {
-  const values = SCORE_FIELDS.map((f) => item[f]).filter((v) => v != null);
-  if (!values.length) return "—";
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  return Number.isInteger(avg) ? String(avg) : avg.toFixed(1);
-}
-
-function setPageLayout(view) {
-  appEl.classList.toggle("page-evaluations", view === "evaluations");
-}
-
 async function renderHome() {
-  setPageLayout("home");
   const departments = await api("/api/departments");
   appEl.innerHTML = `
     <header class="page-header">
       <h1>تقييم المحادثات الطبية</h1>
-      <p>واجهة الأطباء الخبراء — Multi-Agent Medical Chatbot Evaluation</p>
+      <p>Multi-Agent Medical Chatbot Evaluation — واجهة الأطباء الخبراء</p>
       <div class="top-actions">
-        <a class="btn btn-outline" href="/evaluations" data-nav>عرض كل التقييمات المحفوظة</a>
+        <a class="btn btn-hero" href="/evaluations" data-nav>عرض كل التقييمات المحفوظة</a>
       </div>
     </header>
     <div class="dept-grid">
@@ -107,102 +127,163 @@ async function renderHome() {
   bindNavLinks();
 }
 
-function downloadEvaluationsCsv(rows) {
-  const headers = [
-    "القسم",
-    "رقم الحالة",
-    "Session ID",
-    "المتوسط",
-    "ارتباط",
-    "دقة",
-    "سؤال واحد",
-    "سلامة",
-    "لغة",
-    "رفض",
-    "قسم (دقة)",
-    "سريري",
-    "ملاحظات",
-    "آخر تحديث",
-  ];
-  const lines = [headers.join(",")];
-  for (const item of rows) {
-    const cells = [
-      item.department_name,
-      item.case_number ?? "",
-      item.session_id,
-      scoreAverage(item),
-      item.clinical_relevance_score,
-      item.question_specificity_score,
-      item.single_question_score,
-      item.safety_score,
-      item.linguistic_score,
-      item.denial_handling_score,
-      item.department_accuracy_score,
-      item.clinical_reasoning_score,
-      (item.doctor_notes || "").replace(/"/g, '""'),
-      item.updated_at,
-    ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`);
-    lines.push(cells.join(","));
-  }
-  const blob = new Blob(["\uFEFF" + lines.join("\n")], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "expert_evaluations.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function renderEvaluationsTableRows(rows) {
-  if (!rows.length) {
-    return `<tr><td colspan="12" class="table-empty">لا توجد تقييمات لهذا القسم.</td></tr>`;
-  }
-  return rows
-    .map((item) => {
-      const notes = item.doctor_notes ? escapeHtml(item.doctor_notes) : "—";
-      const caseLabel =
-        item.case_number != null
-          ? `Case ${item.case_number}<span class="session-id">${item.session_id}</span>`
-          : `Session ${item.session_id}`;
-      const score = (f) => (item[f] != null ? item[f] : "—");
-      return `
-        <tr class="eval-row" data-session="${item.session_id}">
-          <td>${escapeHtml(item.department_name)}</td>
-          <td>
-            <a href="/case/${item.session_id}" class="case-link" data-nav>${caseLabel}</a>
-          </td>
-          <td class="num">${scoreAverage(item)}</td>
-          <td class="num">${score("clinical_relevance_score")}</td>
-          <td class="num">${score("question_specificity_score")}</td>
-          <td class="num">${score("single_question_score")}</td>
-          <td class="num">${score("safety_score")}</td>
-          <td class="num">${score("linguistic_score")}</td>
-          <td class="num">${score("denial_handling_score")}</td>
-          <td class="num">${score("department_accuracy_score")}</td>
-          <td class="num">${score("clinical_reasoning_score")}</td>
-          <td class="notes-cell">${notes}</td>
-        </tr>
-      `;
-    })
-    .join("");
-}
-
 async function renderEvaluations() {
-  setPageLayout("evaluations");
-  const [evaluations, departments] = await Promise.all([
-    api("/api/evaluations"),
-    api("/api/departments"),
-  ]);
+  const rows = await loadSavedEvaluations();
 
-  const deptOptions = departments
-    .map(
-      (d) =>
-        `<option value="${d.key}">${escapeHtml(d.name_ar)}</option>`
-    )
-    .join("");
+  const RUBRIC = [
+    { field: "clinical_relevance_score", header: "ارتباط" },
+    { field: "question_specificity_score", header: "دقة" },
+    { field: "single_question_score", header: "سؤال واحد" },
+    { field: "safety_score", header: "سلامة" },
+    { field: "linguistic_score", header: "لغة" },
+    { field: "denial_handling_score", header: "رفض" },
+    { field: "department_accuracy_score", header: "قسم" },
+    { field: "clinical_reasoning_score", header: "سريري" },
+  ];
 
+  const allDepartments = Array.from(
+    new Map(rows.map((r) => [r.department_key, r.department_name])).entries()
+  ).map(([key, name]) => ({ key, name }));
+
+  function averageScore(r) {
+    const vals = RUBRIC.map((c) => r[c.field]).filter((v) => v != null);
+    if (!vals.length) return null;
+    const sum = vals.reduce((a, b) => a + b, 0);
+    return Math.round((sum / vals.length) * 10) / 10;
+  }
+
+  function formatArDate(dt) {
+    if (!dt) return "—";
+    return new Date(dt).toLocaleString("ar", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+
+  function rowHtml(r) {
+    const avg = averageScore(r);
+    const notes = r.doctor_notes ? escapeHtml(r.doctor_notes) : "—";
+
+    return `
+      <tr class="eval-row evaluated">
+        <td>${escapeHtml(r.department_name)}</td>
+        <td class="nowrap">Case ${r.case_number} - ${r.session_id}</td>
+        <td class="center nowrap">${avg ?? "—"}</td>
+        ${RUBRIC.map((col) => {
+          const v = r[col.field];
+          return `<td class="center nowrap">${v == null ? "—" : v}</td>`;
+        }).join("")}
+        <td class="notes" title="${notes}">${notes}</td>
+        <td class="nowrap">${formatArDate(r.updated_at)}</td>
+        <td class="center nowrap">
+          <a href="/case/${r.session_id}" data-nav class="view-link">عرض</a>
+        </td>
+      </tr>
+    `;
+  }
+
+  function getFilteredRows() {
+    const sel = document.getElementById("dept-filter");
+    if (!sel) return rows;
+    const val = sel.value;
+    if (val === "all") return rows;
+    return rows.filter((r) => r.department_key === val);
+  }
+
+  function updateCount(filtered) {
+    const el = document.getElementById("eval-total-count");
+    if (el) el.textContent = String(filtered.length);
+  }
+
+  function renderTbody(filtered) {
+    const tbody = document.getElementById("eval-tbody");
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="14" class="empty-table">لا توجد تقييمات محفوظة بعد.</td></tr>`;
+    } else {
+      tbody.innerHTML = filtered.map(rowHtml).join("");
+    }
+    updateCount(filtered);
+    bindNavLinks();
+  }
+
+  function downloadCSV(filtered) {
+    const headers = [
+      "القسم",
+      "الحالة",
+      "Session ID",
+      "المتوسط",
+      ...RUBRIC.map((c) => c.header),
+      "ملاحظات",
+      "التاريخ",
+    ];
+    const lines = [headers.join(",")];
+    filtered.forEach((r) => {
+      const line = [
+        r.department_name,
+        `Case ${r.case_number}`,
+        r.session_id,
+        averageScore(r) ?? "",
+        ...RUBRIC.map((c) => (r[c.field] == null ? "" : r[c.field])),
+        r.doctor_notes ? r.doctor_notes.replace(/"/g, '""') : "",
+        r.updated_at ? new Date(r.updated_at).toISOString() : "",
+      ].map((x) => `"${String(x)}"`).join(",");
+      lines.push(line);
+    });
+    triggerDownload(
+      new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" }),
+      "expert_evaluations.csv"
+    );
+  }
+
+  function downloadExcel(filtered) {
+    const headers = [
+      "القسم",
+      "الحالة",
+      "Session ID",
+      "المتوسط",
+      ...RUBRIC.map((c) => c.header),
+      "ملاحظات",
+      "التاريخ",
+    ];
+    const esc = (v) => escapeHtml(v == null ? "" : v);
+    const html =
+      `<table border="1" dir="rtl"><thead><tr>` +
+      headers.map((h) => `<th>${esc(h)}</th>`).join("") +
+      `</tr></thead><tbody>` +
+      filtered
+        .map((r) => {
+          const cells = [
+            r.department_name,
+            `Case ${r.case_number}`,
+            r.session_id,
+            averageScore(r) ?? "",
+            ...RUBRIC.map((c) => (r[c.field] == null ? "" : r[c.field])),
+            r.doctor_notes || "",
+            r.updated_at ? formatArDate(r.updated_at) : "",
+          ].map(esc);
+          return `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+        })
+        .join("") +
+      `</tbody></table>`;
+    triggerDownload(
+      new Blob([html], { type: "application/vnd.ms-excel" }),
+      "expert_evaluations.xls"
+    );
+  }
+
+  function triggerDownload(blob, filename) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2500);
+  }
+
+  const initialFiltered = rows;
   appEl.innerHTML = `
     <nav class="breadcrumb">
       <a href="/" data-nav>الرئيسية</a>
@@ -211,84 +292,65 @@ async function renderEvaluations() {
     </nav>
     <header class="page-header">
       <h1>التقييمات المحفوظة</h1>
-      <p>كل التقييمات المسجّلة من الأطباء — من قاعدة البيانات مباشرة</p>
+      <p>كل التقييمات المسجلة من الأطباء — من قاعدة البيانات مباشرة</p>
     </header>
+
+    <section class="section-card saved-panel">
+      <div class="saved-toolbar">
+        <div class="saved-total">إجمالي التقييمات: <strong id="eval-total-count">${initialFiltered.length}</strong></div>
+        <div class="saved-filter">
+          <label for="dept-filter">القسم:</label>
+          <select id="dept-filter" class="table-select">
+            <option value="all">كل الأقسام</option>
+            ${allDepartments.map((d) => `<option value="${d.key}">${escapeHtml(d.name)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="saved-export">
+          <button type="button" class="export-link" id="btn-export-csv">تنزيل (CSV)</button>
+          <span class="export-sep">أو</span>
+          <button type="button" class="export-link" id="btn-export-excel">Excel</button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="eval-table saved-table">
+          <thead>
+            <tr>
+              <th>القسم</th>
+              <th>الحالة</th>
+              <th class="center">المتوسط</th>
+              ${RUBRIC.map((c) => `<th class="center">${escapeHtml(c.header)}</th>`).join("")}
+              <th>ملاحظات</th>
+              <th>التاريخ</th>
+              <th class="center">عرض</th>
+            </tr>
+          </thead>
+          <tbody id="eval-tbody">
+            ${
+              initialFiltered.length
+                ? initialFiltered.map(rowHtml).join("")
+                : `<tr><td colspan="14" class="empty-table">لا توجد تقييمات محفوظة بعد.</td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
   `;
-
-  const toolbar = document.createElement("div");
-  toolbar.className = "eval-toolbar section-card";
-  toolbar.innerHTML = `
-    <div class="eval-total">إجمالي التقييمات: <strong id="eval-count">${evaluations.length}</strong></div>
-    <label class="eval-filter">
-      <span>القسم:</span>
-      <select id="dept-filter">
-        <option value="">كل الأقسام</option>
-        ${deptOptions}
-      </select>
-    </label>
-    <button type="button" class="btn btn-outline" id="btn-csv">تنزيل CSV (أو Excel)</button>
-  `;
-  appEl.appendChild(toolbar);
-
-  const tableWrap = document.createElement("div");
-  tableWrap.className = "section-card table-card";
-  tableWrap.innerHTML = `
-    <div class="table-scroll">
-      <table class="eval-table">
-        <thead>
-          <tr>
-            <th>القسم</th>
-            <th>الحالة</th>
-            <th>المتوسط</th>
-            <th>ارتباط</th>
-            <th>دقة</th>
-            <th>سؤال واحد</th>
-            <th>سلامة</th>
-            <th>لغة</th>
-            <th>رفض</th>
-            <th>قسم</th>
-            <th>سريري</th>
-            <th>ملاحظات</th>
-          </tr>
-        </thead>
-        <tbody id="eval-tbody">${renderEvaluationsTableRows(evaluations)}</tbody>
-      </table>
-    </div>
-  `;
-  appEl.appendChild(tableWrap);
-
-  if (!evaluations.length) {
-    tableWrap.querySelector("#eval-tbody").innerHTML =
-      `<tr><td colspan="12" class="table-empty">لا توجد تقييمات محفوظة بعد.</td></tr>`;
-  }
-
-  const allRows = evaluations;
-
-  function applyFilter() {
-    const key = document.getElementById("dept-filter").value;
-    const filtered = key
-      ? allRows.filter((r) => r.department_key === key)
-      : allRows;
-    document.getElementById("eval-count").textContent = filtered.length;
-    document.getElementById("eval-tbody").innerHTML =
-      renderEvaluationsTableRows(filtered);
-    bindNavLinks();
-  }
-
-  document.getElementById("dept-filter").addEventListener("change", applyFilter);
-  document.getElementById("btn-csv").addEventListener("click", () => {
-    const key = document.getElementById("dept-filter").value;
-    const filtered = key
-      ? allRows.filter((r) => r.department_key === key)
-      : allRows;
-    downloadEvaluationsCsv(filtered);
-  });
 
   bindNavLinks();
+
+  document.getElementById("dept-filter")?.addEventListener("change", () => {
+    renderTbody(getFilteredRows());
+  });
+  document.getElementById("btn-export-csv")?.addEventListener("click", () => {
+    downloadCSV(getFilteredRows());
+  });
+  document.getElementById("btn-export-excel")?.addEventListener("click", () => {
+    downloadExcel(getFilteredRows());
+  });
 }
 
 async function renderDepartment(deptKey) {
-  setPageLayout("department");
   const [departments, cases] = await Promise.all([
     api("/api/departments"),
     api(`/api/departments/${deptKey}/cases`),
@@ -408,7 +470,6 @@ function bindAccordion() {
 }
 
 async function renderCase(sessionId) {
-  setPageLayout("case");
   const [sessionData, evaluation] = await Promise.all([
     api(`/api/sessions/${sessionId}/messages`),
     api(`/api/sessions/${sessionId}/evaluation`).catch(() => null),
@@ -532,11 +593,15 @@ function bindNavLinks() {
 
 async function render() {
   const route = parseRoute();
+  appEl.classList.remove("wide");
   appEl.innerHTML = `<p class="loading">جاري التحميل...</p>`;
 
   try {
     if (route.view === "home") await renderHome();
-    else if (route.view === "evaluations") await renderEvaluations();
+    else if (route.view === "evaluations") {
+      appEl.classList.add("wide");
+      await renderEvaluations();
+    }
     else if (route.view === "department") await renderDepartment(route.deptKey);
     else if (route.view === "case") await renderCase(route.sessionId);
   } catch (err) {

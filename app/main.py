@@ -21,6 +21,11 @@ app.include_router(evaluation_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/")
 def home():
     return FileResponse(STATIC_DIR / "index.html")
@@ -33,4 +38,9 @@ def department_page(dept_key: str):
 
 @app.get("/case/{session_id}")
 def case_page(session_id: int):
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/evaluations")
+def evaluations_page():
     return FileResponse(STATIC_DIR / "index.html")
