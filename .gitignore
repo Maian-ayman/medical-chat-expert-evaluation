@@ -10,3 +10,5 @@ venv/
 Thumbs.db
 *.db-shm
 *.db-wal
+.gh-config/
+.gh-login-*.txt
