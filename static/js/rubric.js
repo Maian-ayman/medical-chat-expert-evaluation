@@ -103,17 +103,17 @@ const RUBRIC_ITEMS = [
     scores: [
       {
         value: 1,
-        en: "Ignores denied key symptoms and continues the same diagnostic path.",
-        ar: "يتجاهل الأعراض المنفية ويستمر بنفس المسار التشخيصي.",
+        en: "Ignores denied key symptoms and continues the same diagnostic path",
+        ar: "يتجاهل الأعراض المنفية ويستمر بنفس المسار التشخيصي",
       },
       {
         value: 2,
-        en: "Acknowledges denied symptoms but makes limited changes to the diagnostic approach.",
+        en: "Acknowledges denied symptoms but makes limited changes to the diagnostic approach",
         ar: "ينتبه للأعراض المنفية لكن يتأخر بتغيير مساره بطرح أسئلة إضافية لا حاجة لها",
       },
       {
         value: 3,
-        en: "Uses denied symptoms to revise the diagnostic hypothesis and explore more likely alternatives.",
+        en: "Uses denied symptoms to revise the diagnostic hypothesis and explore more likely alternatives",
         ar: "يستخدم الأعراض المنفية لإعادة تقييم الفرضية التشخيصية والتوجه لبدائل أكثر احتمالاً",
       },
     ],
