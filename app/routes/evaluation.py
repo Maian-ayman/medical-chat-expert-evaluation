@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import DEPARTMENTS, DEPARTMENT_BY_KEY, department_for_session
 from app.database import get_db
+from app.deps import get_evaluator_id
 from app.models import ChatMessage, ExpertEvaluation
 from app.schemas import (
     CaseOut,
@@ -27,23 +28,29 @@ def _session_ids_for_department(dept: dict) -> list[int]:
     return list(range(dept["session_start"], dept["session_end"] + 1))
 
 
-def _evaluated_session_ids(db: Session, session_ids: list[int]) -> set[int]:
+def _evaluated_session_ids(
+    db: Session, session_ids: list[int], evaluator_id: str
+) -> set[int]:
     if not session_ids:
         return set()
     rows = db.execute(
         select(ExpertEvaluation.session_id).where(
-            ExpertEvaluation.session_id.in_(session_ids)
+            ExpertEvaluation.session_id.in_(session_ids),
+            ExpertEvaluation.evaluator_id == evaluator_id,
         )
     ).scalars()
     return set(rows.all())
 
 
 @router.get("/departments", response_model=list[DepartmentOut])
-def list_departments(db: Session = Depends(get_db)):
+def list_departments(
+    db: Session = Depends(get_db),
+    evaluator_id: str = Depends(get_evaluator_id),
+):
     result = []
     for dept in DEPARTMENTS:
         session_ids = _session_ids_for_department(dept)
-        evaluated = _evaluated_session_ids(db, session_ids)
+        evaluated = _evaluated_session_ids(db, session_ids, evaluator_id)
         result.append(
             DepartmentOut(
                 key=dept["key"],
@@ -59,13 +66,17 @@ def list_departments(db: Session = Depends(get_db)):
 
 
 @router.get("/departments/{dept_key}/cases", response_model=list[CaseOut])
-def list_cases(dept_key: str, db: Session = Depends(get_db)):
+def list_cases(
+    dept_key: str,
+    db: Session = Depends(get_db),
+    evaluator_id: str = Depends(get_evaluator_id),
+):
     dept = DEPARTMENT_BY_KEY.get(dept_key)
     if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
 
     session_ids = _session_ids_for_department(dept)
-    evaluated = _evaluated_session_ids(db, session_ids)
+    evaluated = _evaluated_session_ids(db, session_ids, evaluator_id)
 
     return [
         CaseOut(
@@ -125,12 +136,19 @@ def get_session_messages(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/sessions/{session_id}/evaluation", response_model=EvaluationOut | None)
-def get_evaluation(session_id: int, db: Session = Depends(get_db)):
+def get_evaluation(
+    session_id: int,
+    db: Session = Depends(get_db),
+    evaluator_id: str = Depends(get_evaluator_id),
+):
     if not department_for_session(session_id):
         raise HTTPException(status_code=404, detail="Session not in evaluation scope")
 
     evaluation = db.execute(
-        select(ExpertEvaluation).where(ExpertEvaluation.session_id == session_id)
+        select(ExpertEvaluation).where(
+            ExpertEvaluation.session_id == session_id,
+            ExpertEvaluation.evaluator_id == evaluator_id,
+        )
     ).scalar_one_or_none()
 
     if not evaluation:
@@ -153,10 +171,15 @@ def get_evaluation(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/evaluations/saved", response_model=list[EvaluationListItemOut])
-def list_saved_evaluations(db: Session = Depends(get_db)):
+def list_saved_evaluations(
+    db: Session = Depends(get_db),
+    evaluator_id: str = Depends(get_evaluator_id),
+):
     evaluations = (
         db.execute(
-            select(ExpertEvaluation).order_by(ExpertEvaluation.updated_at.desc())
+            select(ExpertEvaluation)
+            .where(ExpertEvaluation.evaluator_id == evaluator_id)
+            .order_by(ExpertEvaluation.updated_at.desc())
         )
         .scalars()
         .all()
@@ -193,19 +216,22 @@ def list_saved_evaluations(db: Session = Depends(get_db)):
 
 
 @router.get("/evaluations", response_model=list[EvaluationTableRowOut])
-def list_evaluations(db: Session = Depends(get_db)):
-    # Build table rows for all session_ids inside our evaluation scope.
-    # If a session isn't evaluated yet, rubric scores will be null.
+def list_evaluations(
+    db: Session = Depends(get_db),
+    evaluator_id: str = Depends(get_evaluator_id),
+):
     all_rows: list[EvaluationTableRowOut] = []
 
-    # Fetch all existing evaluations in one query.
     all_session_ids: list[int] = []
     for dept in DEPARTMENTS:
         all_session_ids.extend(_session_ids_for_department(dept))
 
     evaluations = (
         db.execute(
-            select(ExpertEvaluation).where(ExpertEvaluation.session_id.in_(all_session_ids))
+            select(ExpertEvaluation).where(
+                ExpertEvaluation.session_id.in_(all_session_ids),
+                ExpertEvaluation.evaluator_id == evaluator_id,
+            )
         )
         .scalars()
         .all()
@@ -224,13 +250,19 @@ def list_evaluations(db: Session = Depends(get_db)):
                     department_name=dept["name_ar"],
                     evaluated=evaluation is not None,
                     clinical_relevance_score=getattr(evaluation, "clinical_relevance_score", None),
-                    question_specificity_score=getattr(evaluation, "question_specificity_score", None),
+                    question_specificity_score=getattr(
+                        evaluation, "question_specificity_score", None
+                    ),
                     single_question_score=getattr(evaluation, "single_question_score", None),
                     safety_score=getattr(evaluation, "safety_score", None),
                     linguistic_score=getattr(evaluation, "linguistic_score", None),
                     denial_handling_score=getattr(evaluation, "denial_handling_score", None),
-                    department_accuracy_score=getattr(evaluation, "department_accuracy_score", None),
-                    clinical_reasoning_score=getattr(evaluation, "clinical_reasoning_score", None),
+                    department_accuracy_score=getattr(
+                        evaluation, "department_accuracy_score", None
+                    ),
+                    clinical_reasoning_score=getattr(
+                        evaluation, "clinical_reasoning_score", None
+                    ),
                     doctor_notes=getattr(evaluation, "doctor_notes", None),
                     updated_at=getattr(evaluation, "updated_at", None),
                 )
@@ -244,13 +276,17 @@ def save_evaluation(
     session_id: int,
     payload: EvaluationIn,
     db: Session = Depends(get_db),
+    evaluator_id: str = Depends(get_evaluator_id),
 ):
     dept = department_for_session(session_id)
     if not dept:
         raise HTTPException(status_code=404, detail="Session not in evaluation scope")
 
     evaluation = db.execute(
-        select(ExpertEvaluation).where(ExpertEvaluation.session_id == session_id)
+        select(ExpertEvaluation).where(
+            ExpertEvaluation.session_id == session_id,
+            ExpertEvaluation.evaluator_id == evaluator_id,
+        )
     ).scalar_one_or_none()
 
     now = datetime.utcnow()
@@ -262,6 +298,7 @@ def save_evaluation(
         evaluation.updated_at = now
     else:
         evaluation = ExpertEvaluation(
+            evaluator_id=evaluator_id,
             session_id=session_id,
             department_name=dept["name_ar"],
             **data,

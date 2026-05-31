@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
+from app.migrations import migrate_expert_evaluations
 from app.models import ExpertEvaluation  # noqa: F401 — register model
 from app.routes.evaluation import router as evaluation_router
 
@@ -15,6 +16,7 @@ app = FastAPI(
     description="واجهة تقييم المحادثات الطبية للأطباء الخبراء",
 )
 
+migrate_expert_evaluations()
 Base.metadata.create_all(bind=engine, tables=[ExpertEvaluation.__table__])
 
 app.include_router(evaluation_router)
