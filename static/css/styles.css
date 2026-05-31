@@ -102,6 +102,11 @@ header.page-header p {
   text-decoration: none;
 }
 
+.back-link {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
 .breadcrumb a:hover {
   text-decoration: underline;
 }
@@ -274,6 +279,11 @@ header.page-header p {
 
 .btn-primary:hover:not(:disabled) {
   background: var(--sky-700);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .btn-secondary {
@@ -511,12 +521,84 @@ header.page-header p {
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
 }
 
+.dept-header {
+  margin-bottom: 1.5rem;
+}
+
+.dept-export-card {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.dept-export-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+  color: var(--sky-700);
+}
+
+.dept-export-progress {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.dept-export-progress strong {
+  color: var(--sky-700);
+}
+
+.dept-export-hint {
+  margin: 0 0 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.btn-export-csv {
+  min-width: 180px;
+}
+
+.rubric-item {
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  background: var(--white);
+}
+
+.rubric-item:last-child {
+  margin-bottom: 0;
+}
+
+.rubric-item-header {
+  padding: 0.9rem 1rem;
+  background: var(--sky-50);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.rubric-item-header .title-en {
+  display: block;
+  font-weight: 600;
+  color: var(--sky-700);
+  font-size: 1rem;
+}
+
+.rubric-item-header .title-ar {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.rubric-item .score-options {
+  padding: 0.85rem 1rem;
+}
+
 .form-actions {
   margin-top: 1.25rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
+  justify-content: flex-start;
 }
 
 .toast {

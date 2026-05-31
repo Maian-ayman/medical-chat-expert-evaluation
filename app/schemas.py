@@ -53,8 +53,8 @@ class EvaluationOut(BaseModel):
 
 class EvaluationListItemOut(BaseModel):
     session_id: int
-    case_number: int | None = None
-    department_key: str | None = None
+    case_number: int
+    department_key: str
     department_name: str
     clinical_relevance_score: int | None = None
     question_specificity_score: int | None = None
@@ -65,16 +65,34 @@ class EvaluationListItemOut(BaseModel):
     department_accuracy_score: int | None = None
     clinical_reasoning_score: int | None = None
     doctor_notes: str | None = None
-    updated_at: datetime
+    updated_at: datetime | None = None
+
+
+class EvaluationTableRowOut(BaseModel):
+    case_number: int
+    session_id: int
+    department_key: str
+    department_name: str
+    evaluated: bool
+    clinical_relevance_score: int | None = None
+    question_specificity_score: int | None = None
+    single_question_score: int | None = None
+    safety_score: int | None = None
+    linguistic_score: int | None = None
+    denial_handling_score: int | None = None
+    department_accuracy_score: int | None = None
+    clinical_reasoning_score: int | None = None
+    doctor_notes: str | None = None
+    updated_at: datetime | None = None
 
 
 class EvaluationIn(BaseModel):
     clinical_relevance_score: int = Field(..., ge=1, le=3)
     question_specificity_score: int = Field(..., ge=1, le=3)
-    single_question_score: int = Field(..., ge=1, le=3)
+    single_question_score: int | None = Field(None, ge=1, le=3)
     safety_score: int = Field(..., ge=1, le=3)
     linguistic_score: int = Field(..., ge=1, le=3)
     denial_handling_score: int = Field(..., ge=1, le=3)
     department_accuracy_score: int = Field(..., ge=1, le=3)
-    clinical_reasoning_score: int = Field(..., ge=1, le=3)
+    clinical_reasoning_score: int | None = Field(None, ge=1, le=3)
     doctor_notes: str | None = None

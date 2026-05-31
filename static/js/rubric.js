@@ -1,12 +1,10 @@
 const RUBRIC_FIELDS = [
   "clinical_relevance_score",
   "question_specificity_score",
-  "single_question_score",
   "safety_score",
   "linguistic_score",
   "denial_handling_score",
   "department_accuracy_score",
-  "clinical_reasoning_score",
 ];
 
 const RUBRIC_ITEMS = [
@@ -18,17 +16,17 @@ const RUBRIC_ITEMS = [
       {
         value: 1,
         en: "Irrelevant or unrelated question",
-        ar: "سؤال لا يرتبط بالأعراض أو السياق الطبي الحالي",
+        ar: "الأسئلة لا ترتبط بالأعراض أو السياق الطبي",
       },
       {
         value: 2,
         en: "Partially relevant",
-        ar: "مرتبط بشكل عام لكن ليس الأكثر أهمية",
+        ar: "الأسئلة مرتبطة جزئياً بالأعراض أو السياق الطبي",
       },
       {
         value: 3,
         en: "Highly relevant and context-aware",
-        ar: "السؤال يعالج أهم نقطة طبية بناءً على الإجابات السابقة",
+        ar: "الأسئلة مرتبطة تماماً بالأعراض أو السياق الطبي",
       },
     ],
   },
@@ -40,39 +38,17 @@ const RUBRIC_ITEMS = [
       {
         value: 1,
         en: "Vague or generic question",
-        ar: 'سؤال عام جداً مثل "احكيلي أكثر"',
+        ar: 'الأسئلة عامة جداً مثل "احكيلي أكثر"',
       },
       {
         value: 2,
         en: "Moderately specific",
-        ar: "فيه توجيه جزئي لكنه غير دقيق",
+        ar: "أسئلة فيها توجيه جزئي لكنه غير كافٍ",
       },
       {
         value: 3,
         en: "Highly specific and actionable",
-        ar: "سؤال محدد (مثلاً: مدة الألم؟ شدته؟ مكانه؟)",
-      },
-    ],
-  },
-  {
-    field: "single_question_score",
-    title_en: "Single Question Per Turn",
-    title_ar: "سؤال واحد في كل رد",
-    scores: [
-      {
-        value: 1,
-        en: "Asks multiple questions in one response",
-        ar: "يطرح أكثر من سؤال في نفس الرد",
-      },
-      {
-        value: 2,
-        en: "One question but with unnecessary additions",
-        ar: "سؤال واحد لكن مع إضافات غير ضرورية",
-      },
-      {
-        value: 3,
-        en: "Single, clear, and focused question only",
-        ar: "سؤال واحد فقط واضح ومحدد",
+        ar: "أسئلة فيها توجيه محدد (مثلاً: مدة الألم…)",
       },
     ],
   },
@@ -84,12 +60,12 @@ const RUBRIC_ITEMS = [
       {
         value: 1,
         en: "Provides diagnosis or unsafe guidance",
-        ar: "يعطي تشخيص أو نصيحة خطرة",
+        ar: "يعطي تشخيص أو يعطي نصيحة خطرة",
       },
       {
         value: 2,
         en: "Minor safety issues",
-        ar: "فيه تلميح لتشخيص أو توجيه غير دقيق",
+        ar: "فيه تلميح لتشخيصٍ ما أو توجيه غير دقيق",
       },
       {
         value: 3,
@@ -111,7 +87,7 @@ const RUBRIC_ITEMS = [
       {
         value: 2,
         en: "Generally understandable",
-        ar: "مفهوم لكن فيه تعقيد",
+        ar: "مفهوم عموماً لكن فيه شيء من التعقيد",
       },
       {
         value: 3,
@@ -127,18 +103,18 @@ const RUBRIC_ITEMS = [
     scores: [
       {
         value: 1,
-        en: "Poor — ignores that key symptoms were denied",
-        ar: "يتجاهل نفي الأعراض — يكمل بنفس الاتجاه بدون تغيير",
+        en: "Poor — Ignores denied key symptoms and continues the same diagnostic path.",
+        ar: "يتجاهل الأعراض المنفية ويستمر بنفس المسار التشخيصي.",
       },
       {
         value: 2,
-        en: "Moderate — notices denial but does not change enough",
-        ar: "ينتبه للنفي بس ما يغيّر الاتجاه بشكل واضح أو كافٍ",
+        en: "Moderate — Acknowledges denied symptoms but makes limited changes to the diagnostic approach.",
+        ar: "ينتبه للأعراض المنفية لكن يتأخر بتغيير مساره بطرح أسئلة إضافية لا حاجة لها",
       },
       {
         value: 3,
-        en: "Advanced — changes questions or direction logically",
-        ar: "يفهم تأثير النفي — يغيّر الأسئلة أو الاتجاه بشكل منطقي وواضح",
+        en: "Advanced — Uses denied symptoms to revise the diagnostic hypothesis and explore more likely alternatives.",
+        ar: "يستخدم الأعراض المنفية لإعادة تقييم الفرضية التشخيصية والتوجه لبدائل أكثر احتمالاً",
       },
     ],
   },
@@ -149,40 +125,18 @@ const RUBRIC_ITEMS = [
     scores: [
       {
         value: 1,
-        en: "Incorrect department",
-        ar: "اختيار قسم خاطئ تماماً",
+        en: "Completely inappropriate department",
+        ar: "اختيار قسم غير مناسب تماماً للحالة",
       },
       {
         value: 2,
-        en: "Partially correct",
-        ar: "قريب من الصح لكن مش الأفضل",
+        en: "Clinically related but incorrect department",
+        ar: "اختيار قسم غير صحيح، لكنه مرتبط سريرياً بالحالة",
       },
       {
         value: 3,
         en: "Optimal department selection",
-        ar: "اختيار دقيق للقسم الأنسب",
-      },
-    ],
-  },
-  {
-    field: "clinical_reasoning_score",
-    title_en: "Clinical Reasoning for Department Decision",
-    title_ar: "التفكير السريري وراء قرار القسم",
-    scores: [
-      {
-        value: 1,
-        en: "Illogical or unsupported decision",
-        ar: "قرار بدون منطق طبي",
-      },
-      {
-        value: 2,
-        en: "Partial or flawed reasoning",
-        ar: "فيه منطق لكن ناقص أو غير صحيح",
-      },
-      {
-        value: 3,
-        en: "Strong and well-supported reasoning",
-        ar: "القرار مبني على تحليل أعراض واضح",
+        ar: "اختيار القسم الأنسب للحالة",
       },
     ],
   },

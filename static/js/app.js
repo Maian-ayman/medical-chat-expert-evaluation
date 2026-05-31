@@ -133,12 +133,10 @@ async function renderEvaluations() {
   const RUBRIC = [
     { field: "clinical_relevance_score", header: "ارتباط" },
     { field: "question_specificity_score", header: "دقة" },
-    { field: "single_question_score", header: "سؤال واحد" },
     { field: "safety_score", header: "سلامة" },
     { field: "linguistic_score", header: "لغة" },
     { field: "denial_handling_score", header: "رفض" },
     { field: "department_accuracy_score", header: "قسم" },
-    { field: "clinical_reasoning_score", header: "سريري" },
   ];
 
   const allDepartments = Array.from(
@@ -202,7 +200,7 @@ async function renderEvaluations() {
   function renderTbody(filtered) {
     const tbody = document.getElementById("eval-tbody");
     if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="14" class="empty-table">لا توجد تقييمات محفوظة بعد.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12" class="empty-table">لا توجد تقييمات محفوظة بعد.</td></tr>`;
     } else {
       tbody.innerHTML = filtered.map(rowHtml).join("");
     }
@@ -329,7 +327,7 @@ async function renderEvaluations() {
             ${
               initialFiltered.length
                 ? initialFiltered.map(rowHtml).join("")
-                : `<tr><td colspan="14" class="empty-table">لا توجد تقييمات محفوظة بعد.</td></tr>`
+                : `<tr><td colspan="12" class="empty-table">لا توجد تقييمات محفوظة بعد.</td></tr>`
             }
           </tbody>
         </table>
@@ -363,14 +361,20 @@ async function renderDepartment(deptKey) {
 
   appEl.innerHTML = `
     <nav class="breadcrumb">
-      <a href="/" data-nav>الرئيسية</a>
-      <span>›</span>
-      <span>${escapeHtml(dept.name_ar)}</span>
+      <a href="/" data-nav class="back-link">← الأقسام</a>
     </nav>
-    <header class="page-header">
+    <header class="page-header dept-header">
       <h1>${escapeHtml(dept.name_ar)}</h1>
-      <p>${escapeHtml(dept.name_en)} — ${dept.evaluated_count} من ${dept.total_cases} حالة مقيّمة</p>
+      <p>اختر حالة للمراجعة والتقييم</p>
     </header>
+
+    <section class="section-card dept-export-card">
+      <h3 class="dept-export-title">تصدير تقييمات القسم</h3>
+      <p class="dept-export-progress">تم تقييم <strong>${dept.evaluated_count}</strong> من <strong>${dept.total_cases}</strong> حالة</p>
+      <p class="dept-export-hint">بعد الانتهاء من تقييم الحالات، نزّل ملف CSV وأرسله لفريق المشروع.</p>
+      <button type="button" class="btn btn-primary btn-export-csv" id="btn-dept-csv">تنزيل ملف CSV</button>
+    </section>
+
     <div class="case-list">
       ${cases
         .map(
@@ -385,7 +389,7 @@ async function renderDepartment(deptKey) {
             <div class="meta">Session ID: ${c.session_id}</div>
           </div>
           <span class="badge ${c.evaluated ? "done" : "pending"}">
-            ${c.evaluated ? "تم تقييمها" : "لم يتم تقييمها"}
+            ${c.evaluated ? "تم تقييمها" : "غير مقيم"}
           </span>
         </a>
       `
@@ -394,13 +398,55 @@ async function renderDepartment(deptKey) {
     </div>
   `;
   bindNavLinks();
+
+  document.getElementById("btn-dept-csv")?.addEventListener("click", async () => {
+    try {
+      const saved = await loadSavedEvaluations();
+      const deptRows = saved.filter((r) => r.department_key === deptKey);
+      if (!deptRows.length) {
+        alert("لا توجد تقييمات محفوظة في هذا القسم بعد.");
+        return;
+      }
+      downloadDeptCSV(deptRows, dept.name_ar);
+    } catch (err) {
+      alert(err.message || "فشل تنزيل الملف");
+    }
+  });
 }
 
-function renderRubricAccordion(existing = {}) {
-  return RUBRIC_ITEMS.map((item, index) => {
+function downloadDeptCSV(rows, deptName) {
+  const cols = [
+    { field: "clinical_relevance_score", header: "ارتباط" },
+    { field: "question_specificity_score", header: "دقة" },
+    { field: "safety_score", header: "سلامة" },
+    { field: "linguistic_score", header: "لغة" },
+    { field: "denial_handling_score", header: "رفض" },
+    { field: "department_accuracy_score", header: "قسم" },
+  ];
+  const headers = ["القسم", "الحالة", "Session ID", ...cols.map((c) => c.header), "ملاحظات", "التاريخ"];
+  const lines = [headers.join(",")];
+  rows.forEach((r) => {
+    const line = [
+      deptName,
+      `Case ${r.case_number}`,
+      r.session_id,
+      ...cols.map((c) => (r[c.field] == null ? "" : r[c.field])),
+      r.doctor_notes ? r.doctor_notes.replace(/"/g, '""') : "",
+      r.updated_at ? new Date(r.updated_at).toISOString() : "",
+    ].map((x) => `"${String(x)}"`).join(",");
+    lines.push(line);
+  });
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${deptName}_evaluations.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2500);
+}
+
+function renderRubricList(existing = {}) {
+  return RUBRIC_ITEMS.map((item) => {
     const selected = existing[item.field];
-    const badgeClass = selected ? "filled" : "";
-    const badgeText = selected || "—";
     const options = item.scores
       .map(
         (s) => `
@@ -410,7 +456,7 @@ function renderRubricAccordion(existing = {}) {
           name="${item.field}"
           value="${s.value}"
           ${selected === s.value ? "checked" : ""}
-          required
+          data-rubric-input
         />
         <span class="score-num">${s.value}</span>
         <span class="score-text">
@@ -423,50 +469,31 @@ function renderRubricAccordion(existing = {}) {
       .join("");
 
     return `
-      <div class="accordion-item ${index === 0 ? "open" : ""}" data-accordion>
-        <button type="button" class="accordion-header" aria-expanded="${index === 0}">
-          <span>
-            <span class="title-en">${escapeHtml(item.title_en)}</span>
-            <span class="title-ar">${escapeHtml(item.title_ar)}</span>
-          </span>
-          <span class="score-badge ${badgeClass}" data-badge-for="${item.field}">${badgeText}</span>
-          <span class="accordion-chevron" aria-hidden="true">▼</span>
-        </button>
-        <div class="accordion-body">
-          <div class="score-options">${options}</div>
+      <div class="rubric-item" data-rubric-field="${item.field}">
+        <div class="rubric-item-header">
+          <span class="title-en">${escapeHtml(item.title_en)}</span>
+          <span class="title-ar">${escapeHtml(item.title_ar)}</span>
         </div>
+        <div class="score-options">${options}</div>
       </div>
     `;
   }).join("");
 }
 
-function bindAccordion() {
-  document.querySelectorAll("[data-accordion]").forEach((item) => {
-    const header = item.querySelector(".accordion-header");
-    header.addEventListener("click", () => {
-      const isOpen = item.classList.contains("open");
-      document.querySelectorAll("[data-accordion].open").forEach((el) => {
-        el.classList.remove("open");
-        el.querySelector(".accordion-header").setAttribute("aria-expanded", "false");
-      });
-      if (!isOpen) {
-        item.classList.add("open");
-        header.setAttribute("aria-expanded", "true");
-      }
-    });
-  });
+function updateSaveButtonState(form) {
+  const saveBtn = form.querySelector("#btn-save");
+  if (!saveBtn) return;
+  const complete = RUBRIC_FIELDS.every(
+    (field) => form.querySelector(`input[name="${field}"]:checked`)
+  );
+  saveBtn.disabled = !complete;
+}
 
-  document.querySelectorAll('input[type="radio"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      const badge = document.querySelector(
-        `[data-badge-for="${input.name}"]`
-      );
-      if (badge) {
-        badge.textContent = input.value;
-        badge.classList.add("filled");
-      }
-    });
+function bindRubricInputs(form) {
+  form.querySelectorAll("[data-rubric-input]").forEach((input) => {
+    input.addEventListener("change", () => updateSaveButtonState(form));
   });
+  updateSaveButtonState(form);
 }
 
 async function renderCase(sessionId) {
@@ -504,9 +531,6 @@ async function renderCase(sessionId) {
         <button type="button" class="btn btn-secondary" id="btn-prev" ${sessionData.prev_session_id ? "" : "disabled"}>
           ← Previous Case
         </button>
-        <button type="button" class="btn btn-secondary" id="btn-next" ${sessionData.next_session_id ? "" : "disabled"}>
-          Next Case →
-        </button>
         <a class="btn btn-secondary" href="/department/${sessionData.department_key}" data-nav>Back to Department</a>
       </div>
     </div>
@@ -518,7 +542,7 @@ async function renderCase(sessionId) {
     <form id="evaluation-form">
       <section class="section-card">
         <h3>معايير التقييم | Evaluation Rubric</h3>
-        <div id="rubric-accordion">${renderRubricAccordion(existing)}</div>
+        <div id="rubric-list">${renderRubricList(existing)}</div>
       </section>
 
       <section class="section-card">
@@ -532,7 +556,10 @@ async function renderCase(sessionId) {
       </section>
 
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">حفظ التقييم | Save Evaluation</button>
+        <button type="submit" class="btn btn-primary" id="btn-save" disabled>حفظ التقييم | Save Evaluation</button>
+        <button type="button" class="btn btn-secondary" id="btn-next" ${sessionData.next_session_id ? "" : "disabled"}>
+          Next Case →
+        </button>
       </div>
     </form>
   `;
@@ -543,7 +570,8 @@ async function renderCase(sessionId) {
   }
 
   bindNavLinks();
-  bindAccordion();
+  const form = document.getElementById("evaluation-form");
+  bindRubricInputs(form);
   scrollToTop();
 
   document.getElementById("btn-prev")?.addEventListener("click", () => {
@@ -553,22 +581,18 @@ async function renderCase(sessionId) {
     if (sessionData.next_session_id) navigate(`/case/${sessionData.next_session_id}`);
   });
 
-  document.getElementById("evaluation-form").addEventListener("submit", async (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const form = e.target;
     const payload = {};
     for (const field of RUBRIC_FIELDS) {
       const input = form.querySelector(`input[name="${field}"]:checked`);
       if (!input) {
         alert("يرجى إكمال جميع معايير التقييم (1–3) قبل الحفظ.");
-        const missing = document.querySelector(`input[name="${field}"]`);
-        missing?.closest("[data-accordion]")?.classList.add("open");
         return;
       }
       payload[field] = parseInt(input.value, 10);
     }
-    payload.doctor_notes =
-      form.doctor_notes.value.trim() || null;
+    payload.doctor_notes = form.doctor_notes.value.trim() || null;
 
     try {
       await api(`/api/sessions/${sessionId}/evaluation`, {
