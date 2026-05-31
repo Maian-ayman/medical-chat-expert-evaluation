@@ -484,7 +484,9 @@ header.page-header p {
 .score-option .score-num {
   font-weight: 700;
   color: var(--sky-600);
-  min-width: 1.5rem;
+  min-width: 4.5rem;
+  flex-shrink: 0;
+  font-size: 0.95rem;
 }
 
 .score-option .score-text .en {

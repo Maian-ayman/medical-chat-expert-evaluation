@@ -458,7 +458,7 @@ function renderRubricList(existing = {}) {
           ${selected === s.value ? "checked" : ""}
           data-rubric-input
         />
-        <span class="score-num">${s.value}</span>
+        <span class="score-num">Score ${s.value}</span>
         <span class="score-text">
           <span class="en">${escapeHtml(s.en)}</span>
           <span class="ar">${escapeHtml(s.ar)}</span>
