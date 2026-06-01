@@ -310,31 +310,47 @@ header.page-header p {
 .chat-messages {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  align-items: stretch;
+  gap: 0.65rem;
 }
 
 .chat-bubble {
-  width: fit-content;
-  max-width: min(82%, 28rem);
-  padding: 0.65rem 0.95rem;
+  display: inline-block;
+  max-width: min(85%, 22rem);
+  padding: 0.7rem 1rem;
   border-radius: 18px;
   font-size: 0.98rem;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
+  direction: rtl;
+  text-align: right;
+  box-sizing: border-box;
 }
 
-/* المريض — يسار الشاشة، أزرق، عرض حسب النص */
+.chat-bubble .chat-text {
+  margin: 0;
+  line-height: 1.65;
+  text-align: right;
+  direction: rtl;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: pretty;
+  hyphens: none;
+}
+
+/* المريض — يسار الشاشة، أزرق */
 .chat-bubble.user {
   align-self: flex-end;
+  margin-left: auto;
+  margin-right: 0;
   background: #5dade2;
   color: var(--white);
   border: none;
 }
 
-/* المساعد — يمين الشاشة، أبيض مع إطار، عرض حسب النص */
+/* المساعد — يمين الشاشة، أبيض مع إطار */
 .chat-bubble.assistant {
   align-self: flex-start;
+  margin-right: auto;
+  margin-left: 0;
   background: var(--white);
   color: var(--text);
   border: 1px solid #e0e0e0;

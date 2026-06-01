@@ -7,6 +7,15 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function formatMessageHtml(text) {
+  const normalized = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return escapeHtml(normalized).replace(/\n/g, "<br>");
+}
+
 function showToast(message) {
   toastEl.textContent = message;
   toastEl.classList.add("show");
@@ -504,7 +513,7 @@ async function renderCase(sessionId) {
     .map(
       (m) => `
         <div class="chat-bubble ${m.role}">
-          ${escapeHtml(m.content)}
+          <p class="chat-text">${formatMessageHtml(m.content)}</p>
         </div>
       `
     )
