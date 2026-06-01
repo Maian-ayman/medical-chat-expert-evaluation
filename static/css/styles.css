@@ -314,16 +314,17 @@ header.page-header p {
 }
 
 .chat-bubble {
-  max-width: 78%;
-  padding: 0.85rem 1rem;
-  border-radius: 12px;
-  font-size: 1rem;
-  line-height: 1.6;
+  width: fit-content;
+  max-width: min(82%, 28rem);
+  padding: 0.65rem 0.95rem;
+  border-radius: 18px;
+  font-size: 0.98rem;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* المريض — يسار الشاشة، أزرق */
+/* المريض — يسار الشاشة، أزرق، عرض حسب النص */
 .chat-bubble.user {
   align-self: flex-end;
   background: #5dade2;
@@ -331,12 +332,12 @@ header.page-header p {
   border: none;
 }
 
-/* المساعد — يمين الشاشة، أبيض مع إطار */
+/* المساعد — يمين الشاشة، أبيض مع إطار، عرض حسب النص */
 .chat-bubble.assistant {
   align-self: flex-start;
   background: var(--white);
   color: var(--text);
-  border: 1px solid #e5e8e8;
+  border: 1px solid #e0e0e0;
 }
 
 .section-card {
