@@ -18,13 +18,10 @@ class ChatMessage(Base):
 
 class ExpertEvaluation(Base):
     __tablename__ = "expert_evaluations"
-    __table_args__ = (
-        UniqueConstraint("session_id", "evaluator_id", name="uq_expert_eval_session_evaluator"),
-    )
+    __table_args__ = (UniqueConstraint("session_id", name="uq_expert_eval_session"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    evaluator_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    session_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    session_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
     department_name: Mapped[str] = mapped_column(String(128), nullable=False)
 
     clinical_relevance_score: Mapped[int | None] = mapped_column(Integer)
