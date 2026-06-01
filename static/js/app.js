@@ -96,9 +96,6 @@ async function renderHome() {
     <header class="page-header">
       <h1>تقييم المحادثات الطبية</h1>
       <p>Multi-Agent Medical Chatbot Evaluation — واجهة الأطباء الخبراء</p>
-      <div class="top-actions">
-        <a class="btn btn-hero" href="/evaluations" data-nav>عرض كل التقييمات المحفوظة</a>
-      </div>
     </header>
     <div class="dept-grid">
       ${departments
@@ -504,16 +501,13 @@ async function renderCase(sessionId) {
 
   const existing = evaluation || {};
   const chatHtml = sessionData.messages
-    .map((m) => {
-      const isUser = m.role === "user";
-      const label = isUser ? "المريض" : "المساعد";
-      return `
+    .map(
+      (m) => `
         <div class="chat-bubble ${m.role}">
-          <div class="chat-label">${label}</div>
           ${escapeHtml(m.content)}
         </div>
-      `;
-    })
+      `
+    )
     .join("");
 
   appEl.innerHTML = `
