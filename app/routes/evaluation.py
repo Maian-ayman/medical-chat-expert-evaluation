@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.config import DEPARTMENTS, DEPARTMENT_BY_KEY, department_for_session
@@ -240,6 +240,29 @@ def list_evaluations(db: Session = Depends(get_db)):
             )
 
     return all_rows
+
+
+@router.delete("/sessions/{session_id}/evaluation")
+def delete_evaluation(session_id: int, db: Session = Depends(get_db)):
+    if not department_for_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not in evaluation scope")
+
+    evaluation = db.execute(
+        select(ExpertEvaluation).where(ExpertEvaluation.session_id == session_id)
+    ).scalar_one_or_none()
+    if not evaluation:
+        raise HTTPException(status_code=404, detail="Evaluation not found")
+
+    db.delete(evaluation)
+    db.commit()
+    return {"deleted": True, "session_id": session_id}
+
+
+@router.delete("/evaluations")
+def clear_all_evaluations(db: Session = Depends(get_db)):
+    result = db.execute(delete(ExpertEvaluation))
+    db.commit()
+    return {"deleted_count": result.rowcount}
 
 
 @router.post("/sessions/{session_id}/evaluation", response_model=EvaluationOut)
