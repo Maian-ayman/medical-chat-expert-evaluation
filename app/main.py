@@ -11,6 +11,13 @@ from app.routes.evaluation import router as evaluation_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
+NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+
+
+def _spa_page():
+    return FileResponse(STATIC_DIR / "index.html", headers=NO_CACHE)
+
+
 app = FastAPI(
     title="Expert Medical Chat Evaluation",
     description="واجهة تقييم المحادثات الطبية للأطباء الخبراء",
@@ -30,19 +37,19 @@ def health():
 
 @app.get("/")
 def home():
-    return FileResponse(STATIC_DIR / "index.html")
+    return _spa_page()
 
 
 @app.get("/department/{dept_key}")
 def department_page(dept_key: str):
-    return FileResponse(STATIC_DIR / "index.html")
+    return _spa_page()
 
 
 @app.get("/case/{session_id}")
 def case_page(session_id: int):
-    return FileResponse(STATIC_DIR / "index.html")
+    return _spa_page()
 
 
 @app.get("/evaluations")
 def evaluations_page():
-    return FileResponse(STATIC_DIR / "index.html")
+    return _spa_page()
