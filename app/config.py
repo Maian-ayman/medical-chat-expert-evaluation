@@ -4,10 +4,21 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATABASE_PATH = BASE_DIR / "hospital.db"
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"sqlite:///{DATABASE_PATH}"
-)
+# PostgreSQL on Render/local: set DATABASE_URL in environment
+# Example: postgresql+psycopg2://user:password@localhost:5432/hospital
+
+
+def normalize_database_url(url: str) -> str:
+    """Render uses postgres:// — SQLAlchemy needs postgresql+psycopg2://."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://") and "+psycopg2" not in url and "+asyncpg" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
+_default_sqlite = f"sqlite:///{DATABASE_PATH.as_posix()}"
+DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL", _default_sqlite))
 
 DEPARTMENTS = [
     {
@@ -55,3 +66,7 @@ def department_for_session(session_id: int) -> dict | None:
         if dept["session_start"] <= session_id <= dept["session_end"]:
             return dept
     return None
+
+
+def is_sqlite() -> bool:
+    return DATABASE_URL.startswith("sqlite")

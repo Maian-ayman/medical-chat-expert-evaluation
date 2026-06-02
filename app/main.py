@@ -3,11 +3,14 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func, select
 
+from app.config import is_sqlite
 from app.database import Base, engine
 from app.migrations import migrate_expert_evaluations
-from app.models import ChatMessage, ExpertEvaluation  # noqa: F401
+from app.models import ChatMessage, ExpertEvaluation  # noqa: F401 — register models
 from app.routes.evaluation import router as evaluation_router
+from app.seed_from_sqlite import seed_from_sqlite_if_needed
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -23,8 +26,9 @@ app = FastAPI(
     description="واجهة تقييم المحادثات الطبية للأطباء الخبراء",
 )
 
-Base.metadata.create_all(bind=engine)
 migrate_expert_evaluations()
+Base.metadata.create_all(bind=engine, tables=[ChatMessage.__table__, ExpertEvaluation.__table__])
+seed_from_sqlite_if_needed()
 
 app.include_router(evaluation_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -32,7 +36,20 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        msg_count = db.execute(select(func.count()).select_from(ChatMessage)).scalar() or 0
+        eval_count = db.execute(select(func.count()).select_from(ExpertEvaluation)).scalar() or 0
+    finally:
+        db.close()
+    return {
+        "status": "ok",
+        "database": "sqlite" if is_sqlite() else "postgresql",
+        "chat_messages": msg_count,
+        "expert_evaluations": eval_count,
+    }
 
 
 @app.get("/")

@@ -1,10 +1,14 @@
 from sqlalchemy import inspect as sa_inspect, text
 
+from app.config import is_sqlite
 from app.database import engine
 
 
 def migrate_expert_evaluations():
-    """Revert per-evaluator storage: one shared evaluation per session_id."""
+    """SQLite-only legacy migration. No-op on PostgreSQL."""
+    if not is_sqlite():
+        return
+
     inspector = sa_inspect(engine)
     if "expert_evaluations" not in inspector.get_table_names():
         return

@@ -12,3 +12,4 @@ Thumbs.db
 *.db-wal
 .gh-config/
 .gh-login-*.txt
+.env
